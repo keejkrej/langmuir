@@ -1,0 +1,59 @@
+sample:
+  - name: azopc_cis
+    full_name: AzoPC cis
+    index: [11, 15, 19, 23]
+    pressure: [0.6, 10, 20, 30]
+  - name: azopc_trans
+    full_name: AzoPC trans
+    index: [39, 43, 47, 51]
+    pressure: [-0.6, 10, 20, 30]
+  - name: azopc_nacl_cis
+    full_name: AzoPC cis with NaCl
+    index: [343, 348, 353, 358]
+    pressure: [0.4, 10, 20, 30]
+  - name: azopc_nacl_trans
+    full_name: AzoPC trans with NaCl
+    index: [365, 370, 375, 380]
+    pressure: [-0.1, 10, 20, 30]
+  - name: azope_cis_02
+    full_name: AzoPE cis
+    index: [100, 104, 108, 112]
+    pressure: [0.2, 10, 20, 25]
+  - name: deuterated_azopc_cis
+    full_name: Deuterated AzoPC cis
+    index: [276, 282, 286, 290, 293]
+    pressure: [-0.3,-0.1, 10, 20, 25]
+  - name: deuterated_azopc_trans
+    full_name: Deuterated AzoPC trans
+    index: [303, 307, 311, 315, 319]
+    pressure: [0.2, 10, 20, 25, 30]
+  - name: dopc
+    full_name: DOPC
+    index: [194, 198, 202, 206, 210]
+    pressure: [-0.4, 10, 20, 25, 30]
+  - name: dope
+    full_name: Dope
+    index: [150, 154, 158, 162, 166]
+    pressure: [-0.3, 10, 20, 25, 30]
+  - name: phodag_cis
+    full_name: Phodag cis
+    index: [241, 245, 249, 253]
+    pressure: [0.5, 5, 10, 12.5]
+  - name: phodag_trans
+    full_name: Phodag trans
+    index: [259, 263, 267, 271]
+    pressure: [-0.1, 5, 10, 12.5]
+  - name: red_azopc_cis_02
+    full_name: Red AzoPC cis
+    index: [172, 176, 180, 184, 188]
+    pressure: [-0.3, 10, 20, 25, 30]
+  - name: red_azopc_trans
+    full_name: Red AzoPC trans
+    index: [120, 124, 128, 132, 136]
+    pressure: [-0.6, 10, 20, 25, 30]
+
+test_sample:
+  - name: azopc_trans
+    full_name: AzoPC trans
+    index: [39, 43, 47, 51]
+    pressure: [-0.6, 10, 20, 30]

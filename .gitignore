@@ -1,4 +1,7 @@
-/data/
+/data/*/gixd/
+/data/*/gixos/
+!/data/*/gixd.yaml
+!/data/*/gixos.yaml
 /processed/
 /plot/
 __pycache__/
