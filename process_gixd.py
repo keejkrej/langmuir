@@ -5,6 +5,9 @@ Background subtraction:
 - Uses inverse quadratic background subtraction: I = A*Qxy^-2 + B
 """
 
+import argparse
+import importlib
+import os
 from pathlib import Path
 from typing import Optional
 
@@ -19,10 +22,8 @@ from utils.data.gixd import (
 # Uses model I = A*Qxy^-2 + B fitted to edge points
 from utils.background import subtract_invquad_background
 import xarray as xr
-from data_gixd import Sample, get_samples, ROI_IQ, ROI_ITAU
-
-DATA_DIR = "data/gixd"
-PROCESSED_DIR = "processed/gixd"
+import data_gixd
+# Constants (PROCESSED_DIR is now set dynamically based on experiment)
 QZ_CUTOFF = 0.04
 QZ_BIN = 5  # channels
 QXY_BIN = 5  # channels for qxy binning before background fitting
@@ -49,7 +50,9 @@ QZ_SLICE_RANGES = [
 def process_sample(
     data_dir: Path,
     processed_dir: Path,
-    data: Sample,
+    data,
+    roi_iq,
+    roi_itau,
 ) -> Optional[xr.DataArray]:
     """Process sample data with inverse quadratic background subtraction.
 
@@ -130,15 +133,15 @@ def process_sample(
             # Extract I(q) profile
             intensity_q_sub_invquad = extract_intensity_q(
                 da_polar_sub_invquad,
-                q_range=(ROI_IQ[0], ROI_IQ[1]),
-                tau_range=(ROI_IQ[2], ROI_IQ[3]),
+                q_range=(roi_iq[0], roi_iq[1]),
+                tau_range=(roi_iq[2], roi_iq[3]),
             )
 
             # Extract I(tau) profile
             intensity_tau_sub_invquad = extract_intensity_tau(
                 da_polar_sub_invquad,
-                q_range=(ROI_ITAU[0], ROI_ITAU[1]),
-                tau_range=(ROI_ITAU[2], ROI_ITAU[3]),
+                q_range=(roi_itau[0], roi_itau[1]),
+                tau_range=(roi_itau[2], roi_itau[3]),
             )
 
             # Store 2D polar and 1D profile data
@@ -288,11 +291,30 @@ def extract_horizontal_slice_comparison(
 
 
 def main():
-    processed_dir = Path(PROCESSED_DIR)
+    parser = argparse.ArgumentParser(description="Process GIXD data")
+    parser.add_argument(
+        "--experiment",
+        type=str,
+        default="1",
+        help='Experiment number (e.g., "1", "2"). Defaults to "1"',
+    )
+    args = parser.parse_args()
+
+    # Normalize experiment number
+    experiment_num = args.experiment.replace("experiment_", "") if "experiment" in args.experiment else args.experiment
+    
+    # Set environment variable internally for data module and reload to pick up the experiment
+    os.environ["EXPERIMENT"] = experiment_num
+    importlib.reload(data_gixd)
+    from data_gixd import get_samples, ROI_IQ, ROI_ITAU
+
+    data_dir = Path(f"data/{experiment_num}/gixd")
+    processed_dir = Path(f"processed/{experiment_num}/gixd")
     processed_dir.mkdir(parents=True, exist_ok=True)
 
+    print(f"Processing experiment {experiment_num}...")
     for s in get_samples():
-        process_sample(Path(DATA_DIR), processed_dir, s)
+        process_sample(data_dir, processed_dir, s, ROI_IQ, ROI_ITAU)
     print("GIXD processing completed.")
 
 

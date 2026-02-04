@@ -1,3 +1,6 @@
+import argparse
+import importlib
+import os
 from pathlib import Path
 import re
 import numpy as np
@@ -5,8 +8,13 @@ import pandas as pd
 import xarray as xr
 import matplotlib.pyplot as plt
 
-PROCESSED_DIR = "processed/gixos"
-PLOT_DIR = "plot/gixos"
+import data_gixos
+
+# PROCESSED_DIR and PLOT_DIR are now set dynamically based on experiment
+
+
+# Global variable for transparency setting (set in main())
+_transparent_bg = False
 
 
 def create_pressure_plots(df: pd.DataFrame | None, output_dir: Path):
@@ -72,7 +80,7 @@ def create_pressure_plots(df: pd.DataFrame | None, output_dir: Path):
 
         plt.tight_layout()
         out = output_dir / fname
-        plt.savefig(out, dpi=300, bbox_inches="tight")
+        plt.savefig(out, dpi=300, bbox_inches="tight", transparent=_transparent_bg)
         plt.close()
         print(f"Saved {out}")
 
@@ -159,7 +167,7 @@ def create_sample_overlays(processed_dir: Path, plot_dir: Path):
             ax.legend(fontsize=8, ncol=2)
             plt.tight_layout()
             out_path = out_dir / f"{sample}_overlay_{method}.png"
-            plt.savefig(out_path, dpi=300, bbox_inches="tight")
+            plt.savefig(out_path, dpi=300, bbox_inches="tight", transparent=_transparent_bg)
             plt.close(fig)
             print(f"Saved {out_path}")
 
@@ -243,7 +251,7 @@ def create_sample_method_panels(processed_dir: Path, plot_dir: Path):
         out_dir = plot_dir / sample
         out_dir.mkdir(parents=True, exist_ok=True)
         out_path = out_dir / f"{sample}_{method}.png"
-        plt.savefig(out_path, dpi=300, bbox_inches="tight")
+        plt.savefig(out_path, dpi=300, bbox_inches="tight", transparent=_transparent_bg)
         plt.close(fig)
         print(f"Saved {out_path}")
 
@@ -306,9 +314,35 @@ def build_summary_from_measurements(processed_dir: Path) -> pd.DataFrame | None:
 
 
 def main():
-    processed_dir = Path(PROCESSED_DIR)
-    plot_dir = Path(PLOT_DIR)
+    parser = argparse.ArgumentParser(description="Plot GIXOS data")
+    parser.add_argument(
+        "--experiment",
+        type=str,
+        default="1",
+        help='Experiment number (e.g., "1", "2"). Defaults to "1"',
+    )
+    parser.add_argument(
+        "--transparent",
+        action="store_true",
+        default=False,
+        help="Use transparent background for plots",
+    )
+    args = parser.parse_args()
+
+    # Normalize experiment number
+    experiment_num = args.experiment.replace("experiment_", "") if "experiment" in args.experiment else args.experiment
+    
+    # Set environment variable internally for data module and reload to pick up the experiment
+    os.environ["EXPERIMENT"] = experiment_num
+    importlib.reload(data_gixos)
+
+    processed_dir = Path(f"processed/{experiment_num}/gixos")
+    plot_dir = Path(f"plot/{experiment_num}/gixos")
     plot_dir.mkdir(parents=True, exist_ok=True)
+
+    # Store transparency setting for use in plotting functions
+    global _transparent_bg
+    _transparent_bg = args.transparent
 
     # Create per-sample overlay plots (data+fit across pressures), split by method
     create_sample_overlays(processed_dir, plot_dir)

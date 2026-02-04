@@ -1,12 +1,13 @@
+import argparse
+import importlib
+import os
 from pathlib import Path
 import pandas as pd
 import xarray as xr
 from utils.fit.gixos import fit_rfxsf, fit_r
-from data_gixos import get_samples
+import data_gixos
 
-
-DATA_PATH = Path("./data/gixos")
-PROCESSED_DIR = Path("processed/gixos")
+# Constants (PROCESSED_DIR is now set dynamically based on experiment)
 TEST = True
 
 
@@ -77,9 +78,28 @@ def save_fit_csv(
 
 
 def main():
-    processed_dir = PROCESSED_DIR
+    parser = argparse.ArgumentParser(description="Process GIXOS data")
+    parser.add_argument(
+        "--experiment",
+        type=str,
+        default="1",
+        help='Experiment number (e.g., "1", "2"). Defaults to "1"',
+    )
+    args = parser.parse_args()
+
+    # Normalize experiment number
+    experiment_num = args.experiment.replace("experiment_", "") if "experiment" in args.experiment else args.experiment
+    
+    # Set environment variable internally for data module and reload to pick up the experiment
+    os.environ["EXPERIMENT"] = experiment_num
+    importlib.reload(data_gixos)
+    from data_gixos import get_samples
+
+    data_path = Path(f"./data/{experiment_num}/gixos")
+    processed_dir = Path(f"processed/{experiment_num}/gixos")
     processed_dir.mkdir(parents=True, exist_ok=True)
 
+    print(f"Processing experiment {experiment_num}...")
     print("Starting GIXOS fitting.")
 
     # No global aggregation; per-measurement CSVs/NCs only
@@ -89,8 +109,8 @@ def main():
         print(f"Processing sample {name}...")
 
         for idx, p in zip(indices, pressures):
-            sf_file = DATA_PATH / name / f"{name}_{idx:05d}_SF.dat"
-            r_file = DATA_PATH / name / f"{name}_{idx:05d}_R.dat"
+            sf_file = data_path / name / f"{name}_{idx:05d}_SF.dat"
+            r_file = data_path / name / f"{name}_{idx:05d}_R.dat"
 
             if not sf_file.exists() or not r_file.exists():
                 print(f"Skip {name}_{idx}: missing SF or R file")

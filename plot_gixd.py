@@ -1,3 +1,6 @@
+import argparse
+import importlib
+import os
 from pathlib import Path
 import xarray as xr
 import matplotlib.pyplot as plt
@@ -6,7 +9,7 @@ import pandas as pd
 from matplotlib import rcParams
 
 from utils.fit.gixd import fit_mirrored_gaussian
-from data_gixd import get_samples
+import data_gixd
 
 # Configure matplotlib for publication quality (from plot_paper.py)
 plt.style.use("default")
@@ -40,7 +43,7 @@ rcParams.update(
         "savefig.format": "png",
         "savefig.bbox": "tight",
         "savefig.pad_inches": 0.1,
-        "savefig.transparent": True,
+        "savefig.transparent": False,  # Will be overridden by --transparent argument
     }
 )
 
@@ -56,8 +59,30 @@ OFFSET_BOUNDS = (-1, 5)
 # Format: (amplitude, center, sigma, offset)
 MIRRORED_GAUSSIAN_INITIAL_GUESS = (2.0, 30.0, 20.0, 0.0)
 
-PROCESSED_DIR = "processed/gixd"
-PLOT_DIR = "plot/gixd"
+# PROCESSED_DIR and PLOT_DIR are now set dynamically based on experiment
+
+# Color mapping dictionary for tilt vs pressure plot
+# Supports both experiment 1 and experiment 2 sample names
+SAMPLE_COLORS = {
+    # Experiment 1
+    "dopc": "black",
+    "redazo": "red",
+    "azotrans": "blue",
+    "azocis": "purple",
+    # Experiment 2
+    "azopc_cis": "purple",
+    "azopc_trans": "blue",
+    "azopc_nacl_cis": "magenta",
+    "azopc_nacl_trans": "cyan",
+    "azope_cis_02": "orange",
+    "deuterated_azopc_cis": "darkviolet",
+    "deuterated_azopc_trans": "navy",
+    "dope": "green",
+    "phodag_cis": "brown",
+    "phodag_trans": "teal",
+    "red_azopc_cis_02": "crimson",
+    "red_azopc_trans": "darkred",
+}
 
 # Professional styling options (from plot_paper.py)
 COLORMAP = "inferno"  # Professional colormap: 'viridis', 'plasma', 'inferno', 'magma', 'cividis'
@@ -74,6 +99,8 @@ FIGURE_SIZE_SINGLE = (4, 4)  # Single plot size
 
 def get_sample_by_name(sample_name: str):
     """Get sample information by name."""
+    # Import here to avoid circular dependency - get_samples will be available when called from main()
+    from data_gixd import get_samples
     samples = get_samples()
     for sample in samples:
         if sample["name"] == sample_name:
@@ -934,8 +961,34 @@ def plot_horizontal_slice_comparison(sample_dir, plot_path):
 
 
 def main():
-    processed_dir = Path(PROCESSED_DIR)
-    plot_dir = Path(PLOT_DIR)
+    parser = argparse.ArgumentParser(description="Plot GIXD data")
+    parser.add_argument(
+        "--experiment",
+        type=str,
+        default="1",
+        help='Experiment number (e.g., "1", "2"). Defaults to "1"',
+    )
+    parser.add_argument(
+        "--transparent",
+        action="store_true",
+        default=False,
+        help="Use transparent background for plots",
+    )
+    args = parser.parse_args()
+
+    # Set transparency based on argument
+    rcParams["savefig.transparent"] = args.transparent
+
+    # Normalize experiment number
+    experiment_num = args.experiment.replace("experiment_", "") if "experiment" in args.experiment else args.experiment
+    
+    # Set environment variable internally for data module and reload to pick up the experiment
+    os.environ["EXPERIMENT"] = experiment_num
+    importlib.reload(data_gixd)
+    from data_gixd import get_samples
+
+    processed_dir = Path(f"processed/{experiment_num}/gixd")
+    plot_dir = Path(f"plot/{experiment_num}/gixd")
     plot_dir.mkdir(parents=True, exist_ok=True)
 
     # Dictionary to collect τ_max vs pressure for all samples
@@ -976,6 +1029,11 @@ def main():
             1, 1, figsize=FIGURE_SIZE_SINGLE, constrained_layout=True
         )
 
+        # Fallback: use tab10 colormap for samples not in SAMPLE_COLORS dictionary
+        sample_names_list = list(all_tilt_data.keys())
+        cmap = plt.get_cmap("tab10")
+        fallback_colors = {name: cmap(i % 10) for i, name in enumerate(sample_names_list)}
+
         for sample_name, tilt_df in all_tilt_data.items():
             # Get full name for legend
             full_name, _, _ = get_sample_info(sample_name)
@@ -998,17 +1056,8 @@ def main():
             for pressure, tilt_value in zip(pressures, tau_values):
                 print(f"{sample_name}: τ = {tilt_value:.2f}° at p = {pressure} mN/m")
 
-            # Assign colors based on sample type
-            if sample_name == "dopc":
-                color = "black"
-            elif sample_name == "redazo":
-                color = "red"
-            elif sample_name == "azotrans":
-                color = "blue"  # Changed from red to blue
-            elif sample_name == "azocis":
-                color = "purple"  # Changed from blue to purple
-            else:
-                color = "gray"  # Default color for other samples
+            # Get color from SAMPLE_COLORS dictionary or fallback to colormap
+            color = SAMPLE_COLORS.get(sample_name, fallback_colors.get(sample_name, "gray"))
 
             if len(pressures) > 0:  # Only plot if there's data left after filtering
                 ax_tilt.plot(pressures, tau_values, "o-", label=full_name, color=color)
