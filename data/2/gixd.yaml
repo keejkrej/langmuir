@@ -46,7 +46,7 @@ sample:
     index: [195, 199, 203, 207, 211]
     pressure: [-0.4, 10, 20, 25, 30]
   - name: dope
-    full_name: Dope
+    full_name: DOPE
     index: [151, 155, 159, 163, 167]
     pressure: [-0.3, 10, 20, 25, 30]
   - name: phodag_cis
