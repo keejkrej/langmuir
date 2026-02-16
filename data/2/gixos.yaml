@@ -19,6 +19,10 @@ sample:
     full_name: AzoPE cis
     index: [100, 104, 108, 112]
     pressure: [0.2, 10, 20, 25]
+  - name: azope_trans
+    full_name: AzoPE trans
+    index: [78, 82, 86, 90, 94]
+    pressure: [0.2, 10, 20, 25, 30]
   - name: deuterated_azopc_cis
     full_name: Deuterated AzoPC cis
     index: [276, 282, 286, 290, 293]
