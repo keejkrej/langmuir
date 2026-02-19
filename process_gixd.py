@@ -76,7 +76,7 @@ def process_sample(
     da_cart_binned = None
 
     for i, p in zip(index, pressure):
-        da_cart = load_gixd_xarray(data_dir, name, i)
+        da_cart = load_gixd_xarray(data_dir, name, i, qz_max=data_gixd.QZ_MAX)
 
         # Preserve the original cartesian data (pre-subtraction)
         da_cart_raw = da_cart.sel(qz=slice(QZ_CUTOFF, None))

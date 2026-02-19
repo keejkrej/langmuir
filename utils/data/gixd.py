@@ -5,14 +5,21 @@ from utils.math.transform import cartesian2polar
 from utils.math.peak import detect_peaks_median
 
 
-def load_gixd_xarray(data_path, name, index):
+def load_gixd_xarray(data_path, name, index, qz_max: float = 1.0):
+    """
+    Load GIXD combined intensity data as xarray.DataArray.
+
+    Filters out data at high qz (qz > qz_max) during loading. Typically qz_max
+    is set via the gixd.yaml config (qz_max).
+    """
     data_path = Path(data_path) / name
     intensity = np.loadtxt(data_path / f"{name}_{index}_{index}_combined_I.dat")
     qxy = np.loadtxt(data_path / f"{name}_{index}_{index}_combined_Qxy.dat")
     qz = np.loadtxt(data_path / f"{name}_{index}_{index}_combined_Qz.dat")
-    return xr.DataArray(
+    da = xr.DataArray(
         intensity, dims=("qz", "qxy"), coords={"qz": qz, "qxy": qxy}, name="intensity"
     )
+    return da.sel(qz=slice(None, qz_max))
 
 
 def gixd_cartesian2polar(da_cart, dq, dtau):

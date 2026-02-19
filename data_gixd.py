@@ -17,8 +17,8 @@ class Sample(TypedDict):
 _EXPERIMENT_ENV = os.getenv("EXPERIMENT", "1")
 _EXPERIMENT_NUM = _EXPERIMENT_ENV.replace("experiment_", "") if "experiment" in _EXPERIMENT_ENV else _EXPERIMENT_ENV
 
-# Load data from experiment-specific YAML file
-_DATA_FILE = Path.home() / "data" / "langmuir" / _EXPERIMENT_NUM / "gixd.yaml"
+# Load data from experiment-specific YAML file (./data in project)
+_DATA_FILE = Path(__file__).resolve().parent / "data" / _EXPERIMENT_NUM / "gixd.yaml"
 with _DATA_FILE.open() as f:
     _DATA = yaml.safe_load(f)
 
@@ -55,3 +55,4 @@ def get_water() -> Sample:
 
 ROI_IQ: list[float] = _DATA["roi_iq"]  # [q_min, q_max, tau_min, tau_max]
 ROI_ITAU: list[float] = _DATA["roi_itau"]  # [q_min, q_max, tau_min, tau_max]
+QZ_MAX: float = _DATA.get("qz_max", 1.0)  # Max qz to include when loading (filter out high qz)

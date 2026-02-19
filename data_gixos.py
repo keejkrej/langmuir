@@ -17,8 +17,8 @@ class Sample(TypedDict):
 _EXPERIMENT_ENV = os.getenv("EXPERIMENT", "1")
 _EXPERIMENT_NUM = _EXPERIMENT_ENV.replace("experiment_", "") if "experiment" in _EXPERIMENT_ENV else _EXPERIMENT_ENV
 
-# Load data from experiment-specific YAML file
-_DATA_FILE = Path.home() / "data" / "langmuir" / _EXPERIMENT_NUM / "gixos.yaml"
+# Load data from experiment-specific YAML file (./data in project)
+_DATA_FILE = Path(__file__).resolve().parent / "data" / _EXPERIMENT_NUM / "gixos.yaml"
 with _DATA_FILE.open() as f:
     _DATA = yaml.safe_load(f)
 

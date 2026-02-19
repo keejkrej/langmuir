@@ -1,7 +1,11 @@
 #!/bin/bash
 
-# Get experiment number from argument or default to 1
-EXPERIMENT=${1:-1}
+if [[ -z "$1" ]]; then
+    echo "Usage: $0 <experiment>" >&2
+    echo "Example: $0 1" >&2
+    exit 1
+fi
+EXPERIMENT=$1
 
 # Clean up processed and plot directories for this experiment
 rm -rf ~/results/langmuir/${EXPERIMENT}/gixd

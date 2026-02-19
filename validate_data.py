@@ -79,13 +79,16 @@ def check_gixos_files(data_path: Path, name: str, index: int) -> tuple[bool, lis
     return len(missing) == 0, missing
 
 
-def validate_experiment(experiment_num: str, data_base: Path) -> dict:
+def validate_experiment(
+    experiment_num: str, config_dir: Path, data_dir: Path
+) -> dict:
     """
     Validate data files for a given experiment.
 
     Args:
         experiment_num: Experiment number (e.g., "1", "2")
-        data_base: Base directory containing data subdirectories (e.g., ~/data/langmuir)
+        config_dir: Directory containing YAML configs (e.g., ./data)
+        data_dir: Base directory containing raw data subdirs (e.g., ~/data/langmuir)
 
     Returns:
         Dictionary with validation results
@@ -96,15 +99,15 @@ def validate_experiment(experiment_num: str, data_base: Path) -> dict:
         "gixos": {"valid": True, "samples": {}},
     }
 
-    # Load GIXD YAML
-    gixd_yaml = data_base / experiment_num / "gixd.yaml"
+    # Load GIXD YAML from config_dir
+    gixd_yaml = config_dir / experiment_num / "gixd.yaml"
     if not gixd_yaml.exists():
         console.print(f"[yellow]Warning:[/yellow] {gixd_yaml} not found, skipping GIXD validation")
     else:
         with gixd_yaml.open() as f:
             gixd_data = yaml.safe_load(f)
 
-        gixd_path = data_base / experiment_num / "gixd"
+        gixd_path = data_dir / experiment_num / "gixd"
         if gixd_path.exists():
             # Validate backgrounds
             backgrounds = gixd_data.get("background", [])
@@ -144,15 +147,15 @@ def validate_experiment(experiment_num: str, data_base: Path) -> dict:
         else:
             console.print(f"[yellow]Warning:[/yellow] {gixd_path} directory not found")
 
-    # Load GIXOS YAML
-    gixos_yaml = data_base / experiment_num / "gixos.yaml"
+    # Load GIXOS YAML from config_dir
+    gixos_yaml = config_dir / experiment_num / "gixos.yaml"
     if not gixos_yaml.exists():
         console.print(f"[yellow]Warning:[/yellow] {gixos_yaml} not found, skipping GIXOS validation")
     else:
         with gixos_yaml.open() as f:
             gixos_data = yaml.safe_load(f)
 
-        gixos_path = data_base / experiment_num / "gixos"
+        gixos_path = data_dir / experiment_num / "gixos"
         if gixos_path.exists():
             # Validate samples
             samples = gixos_data.get("sample", [])
@@ -178,13 +181,13 @@ def validate_experiment(experiment_num: str, data_base: Path) -> dict:
     return results
 
 
-def print_summary(results: dict, data_base: Path):
+def print_summary(results: dict, config_dir: Path):
     """
     Print a summary of data statistics for each experiment.
 
     Args:
         results: Validation results dictionary
-        data_base: Base directory containing data subdirectories
+        config_dir: Directory containing YAML configs (e.g., ./data)
     """
     experiment_num = results["experiment"]
     
@@ -194,7 +197,7 @@ def print_summary(results: dict, data_base: Path):
     gixd_table.add_column("Name", style="green")
     gixd_table.add_column("Measurements", justify="right", style="yellow")
     
-    gixd_yaml = data_base / experiment_num / "gixd.yaml"
+    gixd_yaml = config_dir / experiment_num / "gixd.yaml"
     if gixd_yaml.exists():
         with gixd_yaml.open() as f:
             gixd_data = yaml.safe_load(f)
@@ -223,7 +226,7 @@ def print_summary(results: dict, data_base: Path):
     gixos_table.add_column("Name", style="green")
     gixos_table.add_column("Measurements", justify="right", style="yellow")
     
-    gixos_yaml = data_base / experiment_num / "gixos.yaml"
+    gixos_yaml = config_dir / experiment_num / "gixos.yaml"
     if gixos_yaml.exists():
         with gixos_yaml.open() as f:
             gixos_data = yaml.safe_load(f)
@@ -243,13 +246,14 @@ def print_summary(results: dict, data_base: Path):
 
 def main():
     """Main validation function."""
-    # Use ~/data/langmuir as the data base path
-    data_base = Path.home() / "data" / "langmuir"
+    # YAML configs from ./data (project), raw data from ~/data/langmuir
+    config_dir = Path(__file__).resolve().parent / "data"
+    data_dir = Path.home() / "data" / "langmuir"
 
-    # Find all experiment directories
+    # Find all experiment directories from config
     experiments = [
         d.name
-        for d in data_base.iterdir()
+        for d in config_dir.iterdir()
         if d.is_dir() and ((d / "gixd.yaml").exists() or (d / "gixos.yaml").exists())
     ]
     experiments.sort()
@@ -259,7 +263,7 @@ def main():
     all_valid = True
     for exp in experiments:
         console.print(Panel(f"Experiment {exp}", style="bold blue", expand=False))
-        results = validate_experiment(exp, data_base)
+        results = validate_experiment(exp, config_dir, data_dir)
 
         # Print GIXD results
         gixd_results = results["gixd"]
@@ -289,7 +293,7 @@ def main():
         
         # Print summary for this experiment
         console.print()
-        print_summary(results, data_base)
+        print_summary(results, config_dir)
         console.print()
 
     # Exit with error code if validation failed
