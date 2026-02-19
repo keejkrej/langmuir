@@ -4,8 +4,8 @@
 EXPERIMENT=${1:-1}
 
 # Clean up processed and plot directories for this experiment
-rm -rf processed/${EXPERIMENT}/gixd
-rm -rf plot/${EXPERIMENT}/gixd
+rm -rf ~/results/langmuir/${EXPERIMENT}/gixd
+rm -rf ~/plots/langmuir/${EXPERIMENT}/gixd
 
 # Run processing script
 uv run process_gixd.py --experiment ${EXPERIMENT}

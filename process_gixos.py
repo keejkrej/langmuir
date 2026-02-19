@@ -95,8 +95,8 @@ def main():
     importlib.reload(data_gixos)
     from data_gixos import get_samples
 
-    data_path = Path(f"./data/{experiment_num}/gixos")
-    processed_dir = Path(f"processed/{experiment_num}/gixos")
+    data_path = Path.home() / "data" / "langmuir" / experiment_num / "gixos"
+    processed_dir = Path.home() / "results" / "langmuir" / experiment_num / "gixos"
     processed_dir.mkdir(parents=True, exist_ok=True)
 
     print(f"Processing experiment {experiment_num}...")

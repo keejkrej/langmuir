@@ -308,8 +308,8 @@ def main():
     importlib.reload(data_gixd)
     from data_gixd import get_samples, ROI_IQ, ROI_ITAU
 
-    data_dir = Path(f"data/{experiment_num}/gixd")
-    processed_dir = Path(f"processed/{experiment_num}/gixd")
+    data_dir = Path.home() / "data" / "langmuir" / experiment_num / "gixd"
+    processed_dir = Path.home() / "results" / "langmuir" / experiment_num / "gixd"
     processed_dir.mkdir(parents=True, exist_ok=True)
 
     print(f"Processing experiment {experiment_num}...")

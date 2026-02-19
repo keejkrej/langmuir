@@ -336,8 +336,8 @@ def main():
     os.environ["EXPERIMENT"] = experiment_num
     importlib.reload(data_gixos)
 
-    processed_dir = Path(f"processed/{experiment_num}/gixos")
-    plot_dir = Path(f"plot/{experiment_num}/gixos")
+    processed_dir = Path.home() / "results" / "langmuir" / experiment_num / "gixos"
+    plot_dir = Path.home() / "plots" / "langmuir" / experiment_num / "gixos"
     plot_dir.mkdir(parents=True, exist_ok=True)
 
     # Store transparency setting for use in plotting functions

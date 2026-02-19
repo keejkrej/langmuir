@@ -85,7 +85,7 @@ def validate_experiment(experiment_num: str, data_base: Path) -> dict:
 
     Args:
         experiment_num: Experiment number (e.g., "1", "2")
-        data_base: Base directory containing data subdirectories (e.g., ./data)
+        data_base: Base directory containing data subdirectories (e.g., ~/data/langmuir)
 
     Returns:
         Dictionary with validation results
@@ -243,9 +243,8 @@ def print_summary(results: dict, data_base: Path):
 
 def main():
     """Main validation function."""
-    # Use ./data as the data base path
-    script_dir = Path(__file__).parent
-    data_base = script_dir / "data"
+    # Use ~/data/langmuir as the data base path
+    data_base = Path.home() / "data" / "langmuir"
 
     # Find all experiment directories
     experiments = [

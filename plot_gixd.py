@@ -201,12 +201,8 @@ def plot_1d_profiles(sample_dir, plot_path):
             grouped_vars[key] = {}
         grouped_vars[key][var_name] = ds_profiles[var_name]
 
-    # Create directories for subplots and comparisons
-    subplot_dir = plot_path / "subplots" / "1d_profiles"
-    comparison_dir = plot_path / "comparisons"
-
-    for dir_path in [subplot_dir, comparison_dir]:
-        dir_path.mkdir(parents=True, exist_ok=True)
+    # Create output directory (plots go directly in sample folder)
+    plot_path.mkdir(parents=True, exist_ok=True)
 
     # Dictionary to store τ_max vs pressure for this sample as a DataFrame
     tilt_data = []
@@ -349,14 +345,14 @@ def plot_1d_profiles(sample_dir, plot_path):
 
             # Save the combined subplot
             subplot_file = (
-                subplot_dir / f"{sample_name}_{idx}_{pressure}_1d_profiles.png"
+                plot_path / f"{sample_name}_{idx}_{pressure}_1d_profiles.png"
             )
             fig.savefig(subplot_file, bbox_inches="tight")
             plt.close(fig)
 
     # Create pressure comparison plots
     create_pressure_comparison_plots(
-        iq_comparison_data, itau_comparison_data, sample_name, comparison_dir
+        iq_comparison_data, itau_comparison_data, sample_name, plot_path
     )
 
     return tilt_data
@@ -400,10 +396,8 @@ def plot_2d_maps(sample_dir, plot_path):
             grouped_vars[key] = {}
         grouped_vars[key][var_name] = ds_maps[var_name]
 
-    # Create directories for subplots
-    subplot_dir = plot_path / "subplots" / "2d_maps"
-
-    subplot_dir.mkdir(parents=True, exist_ok=True)
+    # Create output directory (plots go directly in sample folder)
+    plot_path.mkdir(parents=True, exist_ok=True)
 
     # Plot each group with essential maps only
     for (idx, pressure), vars_dict in grouped_vars.items():
@@ -563,7 +557,7 @@ def plot_2d_maps(sample_dir, plot_path):
             )
 
             # Save the combined subplot
-            subplot_file = subplot_dir / f"{sample_name}_{idx}_{pressure}_2d_maps.png"
+            subplot_file = plot_path / f"{sample_name}_{idx}_{pressure}_2d_maps.png"
             fig.savefig(subplot_file, bbox_inches="tight")
             plt.close(fig)
 
@@ -571,7 +565,7 @@ def plot_2d_maps(sample_dir, plot_path):
 # Note: plot_2d_maps function removed as it's not used in current plotting pipeline
 
 
-def create_pressure_comparison_plots(iq_data, itau_data, sample_name, comparison_dir):
+def create_pressure_comparison_plots(iq_data, itau_data, sample_name, plot_path):
     """Create comparison plots of different pressures for Iq and Itau."""
 
     # Get full name for plot titles
@@ -662,7 +656,7 @@ def create_pressure_comparison_plots(iq_data, itau_data, sample_name, comparison
         ax_iq.legend(fontsize=8, loc="best", title="p [mN/m]", framealpha=0.3)
 
         # Save I(q) comparison plot
-        iq_comp_file = comparison_dir / f"{sample_name}_Iq_pressure_comparison.png"
+        iq_comp_file = plot_path / f"{sample_name}_Iq_pressure_comparison.png"
         fig_iq.savefig(
             iq_comp_file,
             bbox_inches="tight",
@@ -773,7 +767,7 @@ def create_pressure_comparison_plots(iq_data, itau_data, sample_name, comparison
             ax_itau.legend(fontsize=8, loc="best", title="p [mN/m]", framealpha=0.3)
 
         # Save I(tau) comparison plot
-        itau_comp_file = comparison_dir / f"{sample_name}_Itau_pressure_comparison.png"
+        itau_comp_file = plot_path / f"{sample_name}_Itau_pressure_comparison.png"
         fig_itau.savefig(
             itau_comp_file,
             bbox_inches="tight",
@@ -940,10 +934,8 @@ def plot_horizontal_slice_comparison(sample_dir, plot_path):
                 )
 
                 # Layout already handled by constrained_layout=True
-                slice_dir = plot_path / "horizontal_slices"
-                slice_dir.mkdir(parents=True, exist_ok=True)
                 out_plot = (
-                    slice_dir / f"{sample_name}_{idx}_{pressure}_horizontal_slices.png"
+                    plot_path / f"{sample_name}_{idx}_{pressure}_horizontal_slices.png"
                 )
                 fig.savefig(
                     out_plot,
@@ -987,8 +979,8 @@ def main():
     importlib.reload(data_gixd)
     from data_gixd import get_samples
 
-    processed_dir = Path(f"processed/{experiment_num}/gixd")
-    plot_dir = Path(f"plot/{experiment_num}/gixd")
+    processed_dir = Path.home() / "results" / "langmuir" / experiment_num / "gixd"
+    plot_dir = Path.home() / "plots" / "langmuir" / experiment_num / "gixd"
     plot_dir.mkdir(parents=True, exist_ok=True)
 
     # Dictionary to collect τ_max vs pressure for all samples
