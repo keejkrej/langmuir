@@ -7,9 +7,6 @@ import xarray as xr
 from utils.fit.gixos import fit_rfxsf, fit_r
 import data_gixos
 
-# Constants (PROCESSED_DIR is now set dynamically based on experiment)
-TEST = True
-
 
 def save_fit_nc(
     sample: str, idx: int, pressure: float, method: str, results: dict, out_dir: Path
@@ -85,6 +82,12 @@ def main():
         default="1",
         help='Experiment number (e.g., "1", "2"). Defaults to "1"',
     )
+    parser.add_argument(
+        "--test",
+        action="store_true",
+        default=False,
+        help="Use test_sample from the experiment YAML for faster iteration",
+    )
     args = parser.parse_args()
 
     # Normalize experiment number
@@ -104,7 +107,7 @@ def main():
 
     # No global aggregation; per-measurement CSVs/NCs only
 
-    for s in get_samples(TEST):
+    for s in get_samples(args.test):
         name, indices, pressures = s["name"], s["index"], s["pressure"]
         print(f"Processing sample {name}...")
 

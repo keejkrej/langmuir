@@ -15,6 +15,8 @@ uv run process_gixd.py    # Process GIXD data
 uv run plot_gixd.py       # Plot GIXD results
 uv run process_gixos.py   # Process GIXOS data  
 uv run plot_gixos.py      # Plot GIXOS results
+uv run process_gixd.py --test   # Process only test_sample entries
+uv run process_gixos.py --test  # Fit only test_sample entries for faster iteration
 uv run plot_paper.py      # Generate paper figures
 
 # Select specific experiment (defaults to experiment 1)
@@ -80,9 +82,9 @@ uv run ruff format .      # Format code
   - `background` - Background/reference samples (list for GIXD)
   - `sample` - Sample definitions with `name`, `full_name`, `index`, `pressure`
   - `test_sample` - Test samples for quick validation
-  - `is_test` - Boolean flag (GIXD only)
   - `roi_iq`, `roi_itau` - Region of interest definitions (GIXD only)
 - Experiment selection via `EXPERIMENT` environment variable (defaults to "1")
+- Use `--test` on processing/plotting scripts to select `test_sample`
 - Data files are stored in `data/{experiment}/gixd/{sample_name}/` and `data/{experiment}/gixos/{sample_name}/`
 
 ### Data Processing Patterns

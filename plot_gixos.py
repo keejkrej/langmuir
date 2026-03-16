@@ -95,10 +95,12 @@ def create_pressure_plots(df: pd.DataFrame | None, output_dir: Path):
     )
 
 
-def _collect_nc_pairs(processed_dir: Path):
+def _collect_nc_pairs(processed_dir: Path, allowed_samples: set[str] | None = None):
     pairs = {}
     for sample_dir in sorted(p for p in processed_dir.iterdir() if p.is_dir()):
         sample = sample_dir.name
+        if allowed_samples is not None and sample not in allowed_samples:
+            continue
         for nc_path in sorted(sample_dir.glob(f"{sample}_*_*.nc")):
             m = re.search(
                 rf"{re.escape(sample)}_(\d+)_([\-\d\.]+)_(rfxsf|r)\.nc$", nc_path.name
@@ -116,8 +118,10 @@ def _collect_nc_pairs(processed_dir: Path):
     return pairs
 
 
-def create_sample_overlays(processed_dir: Path, plot_dir: Path):
-    pairs = _collect_nc_pairs(processed_dir)
+def create_sample_overlays(
+    processed_dir: Path, plot_dir: Path, allowed_samples: set[str] | None = None
+):
+    pairs = _collect_nc_pairs(processed_dir, allowed_samples=allowed_samples)
     if not pairs:
         print("No NetCDF fit files found; skipping overlay plots.")
         return
@@ -172,8 +176,10 @@ def create_sample_overlays(processed_dir: Path, plot_dir: Path):
             print(f"Saved {out_path}")
 
 
-def create_sample_method_panels(processed_dir: Path, plot_dir: Path):
-    pairs = _collect_nc_pairs(processed_dir)
+def create_sample_method_panels(
+    processed_dir: Path, plot_dir: Path, allowed_samples: set[str] | None = None
+):
+    pairs = _collect_nc_pairs(processed_dir, allowed_samples=allowed_samples)
     if not pairs:
         print("No NetCDF fit files found; skipping per-sample panels.")
         return
@@ -256,10 +262,14 @@ def create_sample_method_panels(processed_dir: Path, plot_dir: Path):
         print(f"Saved {out_path}")
 
 
-def build_summary_from_measurements(processed_dir: Path) -> pd.DataFrame | None:
+def build_summary_from_measurements(
+    processed_dir: Path, allowed_samples: set[str] | None = None
+) -> pd.DataFrame | None:
     rows = []
     for sample_dir in sorted(p for p in processed_dir.iterdir() if p.is_dir()):
         sample = sample_dir.name
+        if allowed_samples is not None and sample not in allowed_samples:
+            continue
         for csv_path in sample_dir.glob(f"{sample}_*_*.csv"):
             m = re.search(
                 rf"{re.escape(sample)}_(\d+)_([\-\d\.]+)_(rfxsf|r)\.csv$", csv_path.name
@@ -327,6 +337,12 @@ def main():
         default=False,
         help="Use transparent background for plots",
     )
+    parser.add_argument(
+        "--test",
+        action="store_true",
+        default=False,
+        help="Only plot samples listed under test_sample in the experiment YAML",
+    )
     args = parser.parse_args()
 
     # Normalize experiment number
@@ -335,23 +351,25 @@ def main():
     # Set environment variable internally for data module and reload to pick up the experiment
     os.environ["EXPERIMENT"] = experiment_num
     importlib.reload(data_gixos)
+    from data_gixos import get_samples
 
     processed_dir = Path.home() / "results" / "langmuir" / experiment_num / "gixos"
     plot_dir = Path.home() / "plots" / "langmuir" / experiment_num / "gixos"
     plot_dir.mkdir(parents=True, exist_ok=True)
+    sample_names = {sample["name"] for sample in get_samples(args.test)}
 
     # Store transparency setting for use in plotting functions
     global _transparent_bg
     _transparent_bg = args.transparent
 
     # Create per-sample overlay plots (data+fit across pressures), split by method
-    create_sample_overlays(processed_dir, plot_dir)
+    create_sample_overlays(processed_dir, plot_dir, allowed_samples=sample_names)
 
     # Also create per-sample method panels (e.g., azocis_r.png, azocis_rfxsf.png)
-    create_sample_method_panels(processed_dir, plot_dir)
+    create_sample_method_panels(processed_dir, plot_dir, allowed_samples=sample_names)
 
     # Build an aggregate view directly from per-measurement CSVs and make pressure plots
-    df = build_summary_from_measurements(processed_dir)
+    df = build_summary_from_measurements(processed_dir, allowed_samples=sample_names)
     create_pressure_plots(df, plot_dir)
 
 

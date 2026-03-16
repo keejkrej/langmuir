@@ -298,6 +298,12 @@ def main():
         default="1",
         help='Experiment number (e.g., "1", "2"). Defaults to "1"',
     )
+    parser.add_argument(
+        "--test",
+        action="store_true",
+        default=False,
+        help="Use test_sample from the experiment YAML for faster iteration",
+    )
     args = parser.parse_args()
 
     # Normalize experiment number
@@ -313,7 +319,7 @@ def main():
     processed_dir.mkdir(parents=True, exist_ok=True)
 
     print(f"Processing experiment {experiment_num}...")
-    for s in get_samples():
+    for s in get_samples(args.test):
         process_sample(data_dir, processed_dir, s, ROI_IQ, ROI_ITAU)
     print("GIXD processing completed.")
 

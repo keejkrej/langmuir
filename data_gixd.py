@@ -28,19 +28,17 @@ WATER: Sample = _DATA["background"][0]
 SAMPLES: list[Sample] = _DATA["sample"]
 SAMPLES_TEST: list[Sample] = _DATA["test_sample"]
 
-# Test toggle - set to True to use SAMPLES_TEST, False to use SAMPLES
-IS_TEST: bool = _DATA["is_test"]
-
-
-def get_samples() -> list[Sample]:
+def get_samples(test: bool = False) -> list[Sample]:
     """
     Returns a list of samples to process.
-    Uses IS_TEST flag to determine which sample list to return.
+
+    Args:
+        test: If True, returns the configured test samples.
 
     Returns:
         A list of samples.
     """
-    return SAMPLES_TEST if IS_TEST else SAMPLES
+    return SAMPLES_TEST if test else SAMPLES
 
 
 def get_water() -> Sample:
