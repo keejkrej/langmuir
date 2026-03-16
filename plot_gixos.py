@@ -7,6 +7,7 @@ import numpy as np
 import pandas as pd
 import xarray as xr
 import matplotlib.pyplot as plt
+import yaml
 
 import data_gixos
 
@@ -15,14 +16,38 @@ import data_gixos
 
 # Global variable for transparency setting (set in main())
 _transparent_bg = False
+MIN_PRESSURE_FOR_COMPARISON = 5.0
+
+
+def _load_measurement_summary(path: Path) -> dict | None:
+    if not path.exists():
+        return None
+    if path.suffix == ".yaml":
+        with path.open() as f:
+            data = yaml.safe_load(f)
+        return data if isinstance(data, dict) else None
+    if path.suffix == ".csv":
+        df = pd.read_csv(path)
+        if df.empty:
+            return None
+        return df.iloc[0].to_dict()
+    return None
 
 
 def create_pressure_plots(df: pd.DataFrame | None, output_dir: Path):
     if df is None or df.empty:
-        print("No per-measurement CSVs found; skipping pressure plots.")
+        print("No per-measurement summaries found; skipping pressure plots.")
         return
 
     df_sorted = df.sort_values(["Name", "Pressure_mN_per_m"]).copy()
+    # Match the GIXD pressure-summary behavior and ignore pressures <= 5 mN/m.
+    df_sorted = df_sorted[df_sorted["Pressure_mN_per_m"] > MIN_PRESSURE_FOR_COMPARISON]
+    if df_sorted.empty:
+        print(
+            f"No data points with pressure > {MIN_PRESSURE_FOR_COMPARISON:g}; "
+            "skipping pressure plots."
+        )
+        return
 
     # Build a consistent color map per sample
     sample_names = list(df_sorted["Name"].unique())
@@ -140,7 +165,11 @@ def create_sample_overlays(
             items = []
             for idx, pressure, methods in entries:
                 path = methods.get(method)
-                if path is not None:
+                if (
+                    path is not None
+                    and not np.isnan(pressure)
+                    and pressure > MIN_PRESSURE_FOR_COMPARISON
+                ):
                     items.append((pressure, idx, path))
             if not items:
                 continue
@@ -223,12 +252,12 @@ def create_sample_method_panels(
             ax.set_ylabel("RF×SF" if method == "rfxsf" else "Reflectivity")
             ax.grid(True, alpha=0.3)
             ax.set_title(f"p={pressure}[mN/m] (idx {idx})")
-            # Annotation box from per-measurement CSV (if available), otherwise attrs
-            csv_path = Path(str(path).replace(".nc", ".csv"))
-            if csv_path.exists():
-                import pandas as _pd
-
-                row = _pd.read_csv(csv_path).iloc[0].to_dict()
+            # Annotation box from per-measurement YAML (or legacy CSV), otherwise attrs
+            summary_path = Path(str(path).replace(".nc", ".yaml"))
+            row = _load_measurement_summary(summary_path)
+            if row is None:
+                row = _load_measurement_summary(Path(str(path).replace(".nc", ".csv")))
+            if row is not None:
                 exclude = {"sample", "method", "index", "pressure_mN_per_m", "file"}
                 lines = []
                 for k2, v in row.items():
@@ -270,9 +299,15 @@ def build_summary_from_measurements(
         sample = sample_dir.name
         if allowed_samples is not None and sample not in allowed_samples:
             continue
-        for csv_path in sample_dir.glob(f"{sample}_*_*.csv"):
+        summary_paths: dict[str, Path] = {}
+        for summary_path in sorted(sample_dir.glob(f"{sample}_*_*.csv")):
+            summary_paths[summary_path.stem] = summary_path
+        for summary_path in sorted(sample_dir.glob(f"{sample}_*_*.yaml")):
+            summary_paths[summary_path.stem] = summary_path
+        for summary_path in summary_paths.values():
             m = re.search(
-                rf"{re.escape(sample)}_(\d+)_([\-\d\.]+)_(rfxsf|r)\.csv$", csv_path.name
+                rf"{re.escape(sample)}_(\d+)_([\-\d\.]+)_(rfxsf|r)\.(yaml|csv)$",
+                summary_path.name,
             )
             if not m:
                 continue
@@ -283,12 +318,11 @@ def build_summary_from_measurements(
                 pressure = np.nan
             method = m.group(3).lower()
             try:
-                d = pd.read_csv(csv_path)
+                rec = _load_measurement_summary(summary_path)
             except Exception:
                 continue
-            if d.empty:
+            if rec is None:
                 continue
-            rec = d.iloc[0].to_dict()
             rec_normalized = {
                 "Name": sample,
                 "Index": idx,
@@ -368,7 +402,7 @@ def main():
     # Also create per-sample method panels (e.g., azocis_r.png, azocis_rfxsf.png)
     create_sample_method_panels(processed_dir, plot_dir, allowed_samples=sample_names)
 
-    # Build an aggregate view directly from per-measurement CSVs and make pressure plots
+    # Build an aggregate view directly from per-measurement summaries and make pressure plots
     df = build_summary_from_measurements(processed_dir, allowed_samples=sample_names)
     create_pressure_plots(df, plot_dir)
 

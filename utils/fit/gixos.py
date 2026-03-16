@@ -5,38 +5,30 @@ from refnx.dataset import ReflectDataset
 from refnx.reflect import SLD, ReflectModel
 from refnx.analysis import Objective, CurveFitter
 
-# Shared model defaults for azo-PC monolayer (X-ray)
-# Units for SLD are x10^-6 Å^-2 in refnx
-WATER_SLD = 9.43
-TAILS_SLD_INIT = 8.6
-HEAD_SLD_INIT = 14.5
-
-# Bounds reflecting azo-PC expectations while allowing refinement
-TAILS_THICK_BOUNDS = (10.0, 30.0)
-# Tightened SLD bounds around typical values
-TAILS_SLD_BOUNDS = (8.0, 9.0)
-HEAD_THICK_BOUNDS = (5.0, 20.0)
-HEAD_SLD_BOUNDS = (13.5, 15.5)
-ROUGH_BOUNDS = (0.5, 6.0)
+import data_gixos
 
 
-def create_model() -> Tuple[ReflectModel, Any]:
-    """Create a refnx ReflectModel for an azo-PC monolayer.
-
-    Structure: air | tails | head | water
-    - Uses shared SLD defaults and loose bounds for thickness and SLDs.
-    """
+def create_model(fit_config: dict[str, Any]) -> Tuple[ReflectModel, Any]:
+    """Create a refnx ReflectModel for an X-ray monolayer fit."""
     air = SLD(0.0, name="air")
-    water = SLD(WATER_SLD, name="water")
-    tails = SLD(TAILS_SLD_INIT, name="tails")
-    heads = SLD(HEAD_SLD_INIT, name="heads")
+    water = SLD(fit_config["water_sld"], name="water")
+    tails = SLD(fit_config["tails_sld_init"], name="tails")
+    heads = SLD(fit_config["heads_sld_init"], name="heads")
 
-    # initial thickness/roughness; roughness will be varied with ROUGH_BOUNDS
-    structure = air | tails(18.0, 2.5) | heads(8.0, 2.5, vfsolv=0.2) | water
+    structure = (
+        air
+        | tails(fit_config["tails_thick_init"], fit_config["rough_init"])
+        | heads(
+            fit_config["heads_thick_init"],
+            fit_config["rough_init"],
+            vfsolv=fit_config["heads_vfsolv_init"],
+        )
+        | water
+    )
 
     # Roughness on all interfaces
     for i in range(len(structure)):
-        structure[i].rough.setp(vary=True, bounds=ROUGH_BOUNDS)
+        structure[i].rough.setp(vary=True, bounds=fit_config["rough_bounds"])
 
     model = ReflectModel(structure, bkg=0.0, scale=1.0)
 
@@ -44,12 +36,12 @@ def create_model() -> Tuple[ReflectModel, Any]:
     tails_layer = structure[1]
     heads_layer = structure[2]
 
-    tails_layer.thick.setp(vary=True, bounds=TAILS_THICK_BOUNDS)
-    tails_layer.sld.real.setp(vary=True, bounds=TAILS_SLD_BOUNDS)
+    tails_layer.thick.setp(vary=True, bounds=fit_config["tails_thick_bounds"])
+    tails_layer.sld.real.setp(vary=True, bounds=fit_config["tails_sld_bounds"])
 
-    heads_layer.thick.setp(vary=True, bounds=HEAD_THICK_BOUNDS)
-    heads_layer.sld.real.setp(vary=True, bounds=HEAD_SLD_BOUNDS)
-    heads_layer.vfsolv.setp(vary=True, bounds=(0.0, 0.8))
+    heads_layer.thick.setp(vary=True, bounds=fit_config["heads_thick_bounds"])
+    heads_layer.sld.real.setp(vary=True, bounds=fit_config["heads_sld_bounds"])
+    heads_layer.vfsolv.setp(vary=True, bounds=fit_config["heads_vfsolv_bounds"])
 
     return model, structure
 
@@ -81,11 +73,11 @@ def _fit_objective(obj: Objective, verbose: bool, maxiter: int) -> float:
     return obj.chisqr()
 
 
-
-
-def _estimate_scale(model: ReflectModel, q: np.ndarray, y: np.ndarray) -> float:
+def _estimate_scale(
+    model: ReflectModel, q: np.ndarray, y: np.ndarray, q_bounds: tuple[float, float]
+) -> float:
     y_model = model(q)
-    q_mid_mask = (q >= 0.08) & (q <= 0.3)
+    q_mid_mask = (q >= q_bounds[0]) & (q <= q_bounds[1])
     if q_mid_mask.sum() > 3:
         scale_est = np.median(y[q_mid_mask] / np.maximum(y_model[q_mid_mask], 1e-30))
         return float(np.clip(scale_est, 0.01, 1000))
@@ -94,13 +86,18 @@ def _estimate_scale(model: ReflectModel, q: np.ndarray, y: np.ndarray) -> float:
 
 # ---------- R (direct reflectivity) pipeline ----------
 
-def _clean_data_r(q, R, dR, dqz):
+def _clean_data_r(q, R, dR, dqz, fit_config: dict[str, Any]):
     mask_physical = (R > 0) & np.isfinite(R) & np.isfinite(dR) & (dR > 0)
-    mask_qrange = (q >= 0.025) & (q <= 0.6)
+    q_bounds = fit_config["r_q_bounds"]
+    mask_qrange = (q >= q_bounds[0]) & (q <= q_bounds[1])
     mask_clean = mask_physical & mask_qrange
     # Remove extreme outliers
     for i in range(1, len(R) - 1):
-        if R[i] > 100 * max(R[i - 1], R[i + 1]) and R[i] > 1000:
+        if (
+            R[i]
+            > fit_config["r_outlier_neighbor_factor"] * max(R[i - 1], R[i + 1])
+            and R[i] > fit_config["r_outlier_min_intensity"]
+        ):
             mask_clean[i] = False
     return q[mask_clean], R[mask_clean], dR[mask_clean], 2.0 * dqz[mask_clean]
 
@@ -110,14 +107,17 @@ def fit_r(
     save_plot: str | None = None,
     show_plot: bool = True,
     verbose: bool = True,
-    de_maxiter: int = 200,
+    de_maxiter: int | None = None,
 ) -> Dict[str, Any]:
     if verbose:
         print("=" * 60)
         print("R DATA FITTING")
         print("=" * 60)
+    fit_config = data_gixos.get_fit_config()
+    if de_maxiter is None:
+        de_maxiter = fit_config["r_de_maxiter"]
     q_r, R_r, dR_r, dqz_r = np.loadtxt(r_file, skiprows=28, unpack=True)
-    q, R, dR, dq = _clean_data_r(q_r, R_r, dR_r, dqz_r)
+    q, R, dR, dq = _clean_data_r(q_r, R_r, dR_r, dqz_r, fit_config)
 
     if verbose:
         print(f"File: {r_file}")
@@ -128,9 +128,9 @@ def fit_r(
     ds = ReflectDataset(data=(q, R, dR))
     ds.x_err = dq
 
-    model, structure = create_model()
+    model, structure = create_model(fit_config)
 
-    scale_est = _estimate_scale(model, q, R)
+    scale_est = _estimate_scale(model, q, R, fit_config["scale_q_bounds"])
     model.scale.value = scale_est
     model.scale.setp(vary=True, bounds=(scale_est * 0.1, scale_est * 10))
     model.bkg.setp(vary=True, bounds=(0.0, np.min(R) * 0.5))
@@ -168,7 +168,7 @@ def fit_r(
 
 # ---------- RFXSF (Chen method, intrinsic structure) pipeline ----------
 
-def _calculate_fresnel_rf(q, rho_water=WATER_SLD * 1e-6):
+def _calculate_fresnel_rf(q, rho_water: float):
     k = q / 2.0
     kz_air = k
     kz_water = np.sqrt(k**2 - 4 * np.pi * rho_water + 0j)
@@ -176,12 +176,17 @@ def _calculate_fresnel_rf(q, rho_water=WATER_SLD * 1e-6):
     RF = np.abs(r_fresnel) ** 2
     return RF
 
-
-def _create_intrinsic_data(q_sf, SF, dSF, dq_sf):
-    RF = _calculate_fresnel_rf(q_sf)
+def _create_intrinsic_data(q_sf, SF, dSF, dq_sf, fit_config: dict[str, Any]):
+    RF = _calculate_fresnel_rf(q_sf, fit_config["water_sld"] * 1e-6)
     R_intrinsic = RF * SF
     dR_intrinsic = RF * dSF
-    mask = (q_sf >= 0.02) & (q_sf <= 0.8) & (R_intrinsic > 0) & np.isfinite(R_intrinsic)
+    q_bounds = fit_config["rfxsf_q_bounds"]
+    mask = (
+        (q_sf >= q_bounds[0])
+        & (q_sf <= q_bounds[1])
+        & (R_intrinsic > 0)
+        & np.isfinite(R_intrinsic)
+    )
     return q_sf[mask], R_intrinsic[mask], dR_intrinsic[mask], dq_sf[mask]
 
 
@@ -190,12 +195,15 @@ def fit_rfxsf(
     save_plot: str | None = None,
     show_plot: bool = True,
     verbose: bool = True,
-    de_maxiter: int = 150,
+    de_maxiter: int | None = None,
 ) -> Dict[str, Any]:
     if verbose:
         print("=" * 60)
         print("RFXSF (Chen Shen methodology)")
         print("=" * 60)
+    fit_config = data_gixos.get_fit_config()
+    if de_maxiter is None:
+        de_maxiter = fit_config["rfxsf_de_maxiter"]
 
     data_sf = np.loadtxt(sf_file, skiprows=29)
     q_sf = data_sf[:, 0]
@@ -204,7 +212,9 @@ def fit_rfxsf(
     dq_sf = 2.0 * data_sf[:, 3]
     sigma_R = data_sf[:, 4]
 
-    q, R_intrinsic, dR_intrinsic, dq = _create_intrinsic_data(q_sf, SF, dSF, dq_sf)
+    q, R_intrinsic, dR_intrinsic, dq = _create_intrinsic_data(
+        q_sf, SF, dSF, dq_sf, fit_config
+    )
 
     if verbose:
         print(f"File: {sf_file}")
@@ -215,16 +225,10 @@ def fit_rfxsf(
     ds = ReflectDataset(data=(q, R_intrinsic, dR_intrinsic))
     ds.x_err = dq
 
-    model, structure = create_model()
+    model, structure = create_model(fit_config)
 
     # Estimate scale from mid-q
-    R_model_test = model(q)
-    q_mid = (q >= 0.08) & (q <= 0.3)
-    if q_mid.sum() > 5:
-        scale_est = np.median(R_intrinsic[q_mid] / np.maximum(R_model_test[q_mid], 1e-30))
-        scale_est = float(np.clip(scale_est, 0.01, 100))
-    else:
-        scale_est = 1.0
+    scale_est = _estimate_scale(model, q, R_intrinsic, fit_config["scale_q_bounds"])
     model.scale.value = scale_est
     model.scale.setp(vary=True, bounds=(scale_est * 0.1, scale_est * 10))
 
@@ -263,5 +267,4 @@ def fit_rfxsf(
 
     # Verbose and plotting are suppressed/unused in process_gixos pipeline.
     return results
-
 

@@ -1,3 +1,25 @@
+fit:
+  water_sld: 9.43
+  tails_sld_init: 8.6
+  heads_sld_init: 14.5
+  tails_thick_init: 18.0
+  heads_thick_init: 8.0
+  rough_init: 4.0
+  heads_vfsolv_init: 0.2
+  tails_thick_bounds: [8.0, 35.0]
+  tails_sld_bounds: [7.5, 10.5]
+  heads_thick_bounds: [2.0, 18.0]
+  heads_sld_bounds: [13.0, 16.5]
+  heads_vfsolv_bounds: [0.0, 0.95]
+  rough_bounds: [1.0, 10.0]
+  r_q_bounds: [0.025, 0.6]
+  rfxsf_q_bounds: [0.02, 0.8]
+  scale_q_bounds: [0.08, 0.3]
+  r_outlier_neighbor_factor: 100.0
+  r_outlier_min_intensity: 1000.0
+  r_de_maxiter: 200
+  rfxsf_de_maxiter: 150
+
 sample:
   - name: azopc_cis
     full_name: AzoPC cis
