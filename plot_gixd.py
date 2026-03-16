@@ -60,6 +60,7 @@ OFFSET_BOUNDS = (-1, 5)
 MIRRORED_GAUSSIAN_INITIAL_GUESS = (2.0, 30.0, 20.0, 0.0)
 
 # PROCESSED_DIR and PLOT_DIR are now set dynamically based on experiment
+_test_mode = False
 
 # Color mapping dictionary for tilt vs pressure plot
 # Supports both experiment 1 and experiment 2 sample names
@@ -101,7 +102,7 @@ def get_sample_by_name(sample_name: str):
     """Get sample information by name."""
     # Import here to avoid circular dependency - get_samples will be available when called from main()
     from data_gixd import get_samples
-    samples = get_samples()
+    samples = get_samples(_test_mode)
     for sample in samples:
         if sample["name"] == sample_name:
             return sample
@@ -966,10 +967,18 @@ def main():
         default=False,
         help="Use transparent background for plots",
     )
+    parser.add_argument(
+        "--test",
+        action="store_true",
+        default=False,
+        help="Only plot samples listed under test_sample in the experiment YAML",
+    )
     args = parser.parse_args()
 
     # Set transparency based on argument
     rcParams["savefig.transparent"] = args.transparent
+    global _test_mode
+    _test_mode = args.test
 
     # Normalize experiment number
     experiment_num = args.experiment.replace("experiment_", "") if "experiment" in args.experiment else args.experiment
@@ -987,7 +996,7 @@ def main():
     all_tilt_data = {}
 
     # Get samples to process
-    samples = get_samples()
+    samples = get_samples(args.test)
     sample_names = {sample["name"] for sample in samples}
 
     for sample_dir in sorted(processed_dir.iterdir()):

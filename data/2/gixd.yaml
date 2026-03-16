@@ -72,8 +72,6 @@ test_sample:
     index: [40, 44, 48, 52]
     pressure: [-0.6, 10, 20, 30]
 
-is_test: false
-
 qz_max: 0.9
 
 roi_iq: [0.7, 2.0, 0, 10]
