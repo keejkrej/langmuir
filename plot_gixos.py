@@ -18,6 +18,57 @@ import data_gixos
 _transparent_bg = False
 MIN_PRESSURE_FOR_COMPARISON = 5.0
 
+# Match the sample-level colors used by plot_gixd.py.
+SAMPLE_COLORS = {
+    # Experiment 1
+    "dopc": "black",
+    "redazo": "red",
+    "azotrans": "blue",
+    "azocis": "purple",
+    # Experiment 2
+    "azopc_cis": "purple",
+    "azopc_trans": "blue",
+    "azopc_nacl_cis": "magenta",
+    "azopc_nacl_trans": "cyan",
+    "azope_cis_02": "orange",
+    "deuterated_azopc_cis": "darkviolet",
+    "deuterated_azopc_trans": "navy",
+    "dope": "green",
+    "phodag_cis": "brown",
+    "phodag_trans": "teal",
+    "red_azopc_cis_02": "crimson",
+    "red_azopc_trans": "darkred",
+}
+
+
+def _build_sample_colors(sample_names: list[str]) -> dict[str, tuple | str]:
+    """Return sample colors consistent with plot_gixd, with tab10 fallback."""
+    cmap = plt.get_cmap("tab10")
+    fallback_colors = {name: cmap(i % 10) for i, name in enumerate(sample_names)}
+    return {
+        name: SAMPLE_COLORS.get(name, fallback_colors.get(name, "gray"))
+        for name in sample_names
+    }
+
+
+def _build_pressure_colors(
+    sample_name: str, pressures: list[float]
+) -> dict[float, tuple[float, ...]]:
+    """Return per-pressure colors using the same palette logic as plot_gixd."""
+    unique_pressures = sorted(set(pressures))
+
+    if "trans" in sample_name.lower():
+        colormap = plt.cm.Blues
+    elif "cis" in sample_name.lower():
+        colormap = plt.cm.Purples
+    else:
+        colormap = plt.cm.viridis
+
+    return {
+        pressure: colormap(0.5 + 0.5 * i / max(1, len(unique_pressures) - 1))
+        for i, pressure in enumerate(unique_pressures)
+    }
+
 
 def _load_measurement_summary(path: Path) -> dict | None:
     if not path.exists():
@@ -49,10 +100,9 @@ def create_pressure_plots(df: pd.DataFrame | None, output_dir: Path):
         )
         return
 
-    # Build a consistent color map per sample
+    # Reuse the same sample color mapping as plot_gixd.
     sample_names = list(df_sorted["Name"].unique())
-    cmap = plt.get_cmap("tab10")
-    colors = {name: cmap(i % 10) for i, name in enumerate(sample_names)}
+    colors = _build_sample_colors(sample_names)
 
     def make_fig(method: str, total_col: str, vf_col: str, chi_col: str, fname: str):
         # Filter by chi-squared threshold
@@ -177,14 +227,16 @@ def create_sample_overlays(
             items.sort(key=lambda t: (np.inf if np.isnan(t[0]) else t[0], t[1]))
 
             fig, ax = plt.subplots(1, 1, figsize=(9, 7))
-            cmap = plt.get_cmap("viridis")
-            for i, (pressure, idx, path) in enumerate(items):
+            pressure_to_color = _build_pressure_colors(
+                sample, [pressure for pressure, _, _ in items]
+            )
+            for pressure, idx, path in items:
                 ds = xr.open_dataset(path)
                 q = ds["q"].values
                 r = ds["R_data"].values
                 dr = ds["dR_data"].values
                 rfit = ds["R_fit"].values
-                color = cmap(i / max(1, len(items) - 1))
+                color = pressure_to_color[pressure]
                 # Data points
                 ax.errorbar(
                     q, r, yerr=dr, fmt="o", ms=2.5, alpha=0.5, color=color, label=None
