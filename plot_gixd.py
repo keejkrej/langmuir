@@ -8,7 +8,7 @@ import numpy as np
 import pandas as pd
 from matplotlib import rcParams
 
-from utils.fit.gixd import fit_mirrored_gaussian
+from utils.fit.gixd import fit_centered_gaussian, fit_mirrored_gaussian
 import data_gixd
 
 # Configure matplotlib for publication quality (from plot_paper.py)
@@ -58,6 +58,14 @@ OFFSET_BOUNDS = (-1, 5)
 # Initial guess parameters for mirrored Gaussian fitting
 # Format: (amplitude, center, sigma, offset)
 MIRRORED_GAUSSIAN_INITIAL_GUESS = (2.0, 30.0, 20.0, 0.0)
+
+# Initial guess parameters for Gaussian fitting constrained to tau = 0
+# Format: (amplitude, sigma, offset)
+CENTERED_GAUSSIAN_INITIAL_GUESS = (
+    2 * MIRRORED_GAUSSIAN_INITIAL_GUESS[0],
+    MIRRORED_GAUSSIAN_INITIAL_GUESS[2],
+    MIRRORED_GAUSSIAN_INITIAL_GUESS[3],
+)
 
 # PROCESSED_DIR and PLOT_DIR are now set dynamically based on experiment
 _test_mode = False
@@ -173,6 +181,192 @@ def get_sample_info(sample_name: str):
     return sample_name, [], []
 
 
+def calculate_fit_metrics(tau_vals, intensity_vals, fitted_curve, num_params):
+    """Calculate goodness-of-fit metrics over the tau >= 5 fitting region."""
+    mask = (
+        (tau_vals >= 5)
+        & np.isfinite(tau_vals)
+        & np.isfinite(intensity_vals)
+        & np.isfinite(fitted_curve)
+    )
+    y_obs = intensity_vals[mask]
+    y_fit = fitted_curve[mask]
+
+    if len(y_obs) == 0:
+        return {
+            "n_points": 0,
+            "rss": np.nan,
+            "rmse": np.nan,
+            "r_squared": np.nan,
+            "aic": np.nan,
+            "bic": np.nan,
+        }
+
+    residuals = y_obs - y_fit
+    rss = float(np.sum(residuals**2))
+    rmse = float(np.sqrt(rss / len(y_obs)))
+    tss = float(np.sum((y_obs - np.mean(y_obs)) ** 2))
+    r_squared = float(1 - rss / tss) if tss > 0 else np.nan
+
+    mse = max(rss / len(y_obs), np.finfo(float).tiny)
+    aic = float(len(y_obs) * np.log(mse) + 2 * num_params)
+    bic = float(len(y_obs) * np.log(mse) + num_params * np.log(len(y_obs)))
+
+    return {
+        "n_points": len(y_obs),
+        "rss": rss,
+        "rmse": rmse,
+        "r_squared": r_squared,
+        "aic": aic,
+        "bic": bic,
+    }
+
+
+def save_itau_fit_plot(
+    tau_vals,
+    intensity_vals,
+    fitted_curve,
+    sample_name,
+    full_name,
+    idx,
+    pressure,
+    model_label,
+    output_file,
+    center_fit=None,
+):
+    """Save a standalone I(tau) plot for one fitted model."""
+    if fitted_curve is None:
+        return
+
+    fig, ax = plt.subplots(
+        1, 1, figsize=FIGURE_SIZE_SINGLE, constrained_layout=True
+    )
+    ax.scatter(tau_vals, intensity_vals, color="red", s=20, alpha=0.7)
+    ax.plot(
+        tau_vals,
+        fitted_curve,
+        color="black",
+        linewidth=2,
+        alpha=1.0,
+        label=model_label,
+    )
+
+    if center_fit is not None:
+        ax.axvline(
+            x=center_fit,
+            color="black",
+            linestyle="--",
+            linewidth=1.5,
+            alpha=0.7,
+        )
+
+    ax.set_xlabel(TAU_LABEL, fontsize=10)
+    ax.set_ylabel(INTENSITY_LABEL, fontsize=10)
+    ax.set_title(
+        f"{full_name} I(τ), {model_label}\nidx={idx}, p={pressure} mN/m",
+        fontsize=12,
+        style="italic",
+    )
+    ax.grid(True, alpha=0.3, linestyle="--", linewidth=0.5)
+    ax.tick_params(axis="both", which="major", labelsize=9, width=0.8, length=4)
+    ax.legend(fontsize=8, loc="best", framealpha=0.3)
+    fig.savefig(output_file, bbox_inches="tight")
+    plt.close(fig)
+
+
+def save_itau_pressure_fit_comparison(
+    itau_by_pressure,
+    pressure_to_color,
+    sample_name,
+    full_name,
+    plot_path,
+    model_key,
+    model_label,
+    output_suffix,
+    show_center=False,
+):
+    """Save a pressure comparison plot for one I(tau) fit model."""
+    fig, ax = plt.subplots(
+        1, 1, figsize=FIGURE_SIZE_SINGLE, constrained_layout=True
+    )
+    has_fit = False
+
+    for pressure in sorted(itau_by_pressure.keys()):
+        items = itau_by_pressure[pressure]
+        if len(items) == 1:
+            item = items[0]
+            tau_vals = item["tau_vals"]
+            intensity_vals = item["intensity_vals"]
+            fitted_curve = item.get(model_key)
+            center_fit = item.get("center_fit") if show_center else None
+        else:
+            tau_vals = items[0]["tau_vals"]
+            all_intensities = np.array([item["intensity_vals"] for item in items])
+            intensity_vals = np.mean(all_intensities, axis=0)
+
+            fitted_curves = [
+                item.get(model_key)
+                for item in items
+                if item.get(model_key) is not None
+            ]
+            fitted_curve = (
+                np.mean(np.array(fitted_curves), axis=0) if fitted_curves else None
+            )
+
+            center_fits = [
+                item.get("center_fit")
+                for item in items
+                if item.get("center_fit") is not None
+            ]
+            center_fit = np.mean(center_fits) if show_center and center_fits else None
+
+        ax.scatter(
+            tau_vals,
+            intensity_vals,
+            color=pressure_to_color[pressure],
+            s=20,
+            alpha=0.7,
+            label="_nolegend_",
+        )
+
+        if fitted_curve is not None:
+            has_fit = True
+            ax.plot(
+                tau_vals,
+                fitted_curve,
+                color=pressure_to_color[pressure],
+                linewidth=2,
+                alpha=1.0,
+                label=f"{pressure}",
+            )
+
+        if center_fit is not None:
+            ax.axvline(
+                x=center_fit,
+                color=pressure_to_color[pressure],
+                linestyle="-.",
+                linewidth=1.5,
+                alpha=0.7,
+            )
+
+    ax.set_xlabel(TAU_LABEL, fontsize=10)
+    ax.set_ylabel(INTENSITY_LABEL, fontsize=10)
+    ax.set_title(
+        f"{full_name} I(τ), {model_label}\nat various lateral pressures",
+        fontsize=12,
+        style="italic",
+    )
+    ax.grid(True, alpha=0.3, linestyle="--", linewidth=0.5)
+    ax.tick_params(axis="both", which="major", labelsize=9, width=0.8, length=4)
+
+    if has_fit:
+        ax.legend(fontsize=8, loc="best", title="p [mN/m]", framealpha=0.3)
+
+    out_file = plot_path / f"{sample_name}_Itau_{output_suffix}_pressure_comparison.png"
+    fig.savefig(out_file, bbox_inches="tight")
+    plt.close(fig)
+
+
 def plot_1d_profiles(sample_dir, plot_path):
     """Plot 1D profiles: sub_invquad_Iq, sub_invquad_Itau with publication quality styling."""
     sample_name = sample_dir.name
@@ -207,6 +401,7 @@ def plot_1d_profiles(sample_dir, plot_path):
 
     # Dictionary to store τ_max vs pressure for this sample as a DataFrame
     tilt_data = []
+    fit_results = []
 
     # Store data for pressure comparisons
     iq_comparison_data = []
@@ -271,6 +466,7 @@ def plot_1d_profiles(sample_dir, plot_path):
                 # Fit mirrored Gaussian for τ profile
                 center_fit = None
                 fitted_curve = None
+                centered_fitted_curve = None
 
                 # Store for comparison plot
                 comparison_item = {
@@ -280,6 +476,7 @@ def plot_1d_profiles(sample_dir, plot_path):
                     "intensity_vals": intensity_vals,
                     "center_fit": center_fit,  # Store the fitted center position
                     "fitted_curve": fitted_curve,  # Store the fitted curve
+                    "centered_fitted_curve": centered_fitted_curve,
                 }
                 itau_comparison_data.append(comparison_item)
 
@@ -306,7 +503,14 @@ def plot_1d_profiles(sample_dir, plot_path):
                             bounds=bounds,
                         )
                     )
-                    ax2.plot(tau_vals, fitted_curve, "r-", linewidth=2, alpha=1.0)
+                    ax2.plot(
+                        tau_vals,
+                        fitted_curve,
+                        "r-",
+                        linewidth=2,
+                        alpha=1.0,
+                        label="mirrored Gaussian",
+                    )
                     ax2.axvline(
                         x=center_fit,
                         color="red",
@@ -319,6 +523,34 @@ def plot_1d_profiles(sample_dir, plot_path):
                     # Update the comparison data with the actual fitted results
                     comparison_item["center_fit"] = center_fit
                     comparison_item["fitted_curve"] = fitted_curve
+                    save_itau_fit_plot(
+                        tau_vals,
+                        intensity_vals,
+                        fitted_curve,
+                        sample_name,
+                        full_name,
+                        idx,
+                        pressure,
+                        "mirrored Gaussian",
+                        plot_path
+                        / f"{sample_name}_{idx}_{pressure}_Itau_mirrored_gaussian_fit.png",
+                        center_fit=center_fit,
+                    )
+                    fit_results.append(
+                        {
+                            "sample_name": sample_name,
+                            "idx": idx,
+                            "pressure": pressure,
+                            "model": "mirrored_gaussian",
+                            "amplitude": amplitude_fit,
+                            "center": center_fit,
+                            "sigma": sigma_fit,
+                            "offset": offset_fit,
+                            **calculate_fit_metrics(
+                                tau_vals, intensity_vals, fitted_curve, 4
+                            ),
+                        }
+                    )
 
                 except Exception as e:
                     print(
@@ -338,6 +570,78 @@ def plot_1d_profiles(sample_dir, plot_path):
                     # Update the comparison data with the fallback center
                     comparison_item["center_fit"] = center_fit
 
+                try:
+                    centered_bounds = [
+                        [
+                            2 * AMPLITUDE_BOUNDS[0],
+                            SIGMA_BOUNDS[0],
+                            OFFSET_BOUNDS[0],
+                        ],
+                        [
+                            2 * AMPLITUDE_BOUNDS[1],
+                            SIGMA_BOUNDS[1],
+                            OFFSET_BOUNDS[1],
+                        ],
+                    ]
+                    (
+                        centered_amplitude_fit,
+                        centered_sigma_fit,
+                        centered_offset_fit,
+                        centered_fitted_curve,
+                    ) = fit_centered_gaussian(
+                        tau_vals,
+                        intensity_vals,
+                        initial_guess=CENTERED_GAUSSIAN_INITIAL_GUESS,
+                        bounds=centered_bounds,
+                    )
+                    ax2.plot(
+                        tau_vals,
+                        centered_fitted_curve,
+                        color="black",
+                        linestyle="--",
+                        linewidth=2,
+                        alpha=0.9,
+                        label="centered Gaussian",
+                    )
+
+                    comparison_item["centered_fitted_curve"] = centered_fitted_curve
+                    save_itau_fit_plot(
+                        tau_vals,
+                        intensity_vals,
+                        centered_fitted_curve,
+                        sample_name,
+                        full_name,
+                        idx,
+                        pressure,
+                        "centered Gaussian",
+                        plot_path
+                        / f"{sample_name}_{idx}_{pressure}_Itau_centered_gaussian_fit.png",
+                        center_fit=0.0,
+                    )
+                    fit_results.append(
+                        {
+                            "sample_name": sample_name,
+                            "idx": idx,
+                            "pressure": pressure,
+                            "model": "centered_gaussian",
+                            "amplitude": centered_amplitude_fit,
+                            "center": 0.0,
+                            "sigma": centered_sigma_fit,
+                            "offset": centered_offset_fit,
+                            **calculate_fit_metrics(
+                                tau_vals, intensity_vals, centered_fitted_curve, 3
+                            ),
+                        }
+                    )
+
+                except Exception as e:
+                    print(
+                        f"Warning: Failed to fit centered Gaussian for τ profile at pressure {pressure}: {e}"
+                    )
+
+                if fitted_curve is not None or centered_fitted_curve is not None:
+                    ax2.legend(fontsize=8, loc="best", framealpha=0.3)
+
             # Main title
             fig.suptitle(
                 f"{full_name} p={pressure} mN/m",
@@ -350,6 +654,16 @@ def plot_1d_profiles(sample_dir, plot_path):
             )
             fig.savefig(subplot_file, bbox_inches="tight")
             plt.close(fig)
+
+    if fit_results:
+        fit_results_df = pd.DataFrame(fit_results)
+        fit_results_file = plot_path / f"{sample_name}_Itau_fit_results.csv"
+        fit_results_df.to_csv(fit_results_file, index=False)
+
+        for model_name in fit_results_df["model"].unique():
+            model_results = fit_results_df[fit_results_df["model"] == model_name]
+            model_results_file = plot_path / f"{sample_name}_Itau_{model_name}_fit_results.csv"
+            model_results.to_csv(model_results_file, index=False)
 
     # Create pressure comparison plots
     create_pressure_comparison_plots(
@@ -678,6 +992,29 @@ def create_pressure_comparison_plots(iq_data, itau_data, sample_name, plot_path)
                 itau_by_pressure[pressure] = []
             itau_by_pressure[pressure].append(item)
 
+        save_itau_pressure_fit_comparison(
+            itau_by_pressure,
+            pressure_to_color,
+            sample_name,
+            full_name,
+            plot_path,
+            model_key="fitted_curve",
+            model_label="mirrored Gaussian",
+            output_suffix="mirrored_gaussian_fit",
+            show_center=True,
+        )
+        save_itau_pressure_fit_comparison(
+            itau_by_pressure,
+            pressure_to_color,
+            sample_name,
+            full_name,
+            plot_path,
+            model_key="centered_fitted_curve",
+            model_label="centered Gaussian",
+            output_suffix="centered_gaussian_fit",
+            show_center=False,
+        )
+
         # Sort pressures to ensure legend order is from small to big
         for pressure in sorted(itau_by_pressure.keys()):
             items = itau_by_pressure[pressure]
@@ -688,6 +1025,7 @@ def create_pressure_comparison_plots(iq_data, itau_data, sample_name, plot_path)
                 intensity_vals = item["intensity_vals"]
                 center_fit = item.get("center_fit")
                 fitted_curve = item.get("fitted_curve")
+                centered_fitted_curve = item.get("centered_fitted_curve")
             else:
                 # Multiple measurements - average them
                 # Ensure all tau_vals are the same (they should be)
@@ -706,6 +1044,20 @@ def create_pressure_comparison_plots(iq_data, itau_data, sample_name, plot_path)
                     fitted_curve = np.mean(all_fitted_curves, axis=0)
                 else:
                     fitted_curve = None
+
+                # Average centered Gaussian fitted curves if available
+                centered_fitted_curves = [
+                    item.get("centered_fitted_curve")
+                    for item in items
+                    if item.get("centered_fitted_curve") is not None
+                ]
+                if centered_fitted_curves:
+                    all_centered_fitted_curves = np.array(centered_fitted_curves)
+                    centered_fitted_curve = np.mean(
+                        all_centered_fitted_curves, axis=0
+                    )
+                else:
+                    centered_fitted_curve = None
 
                 # Average center fits if available
                 center_fits = [
@@ -741,6 +1093,18 @@ def create_pressure_comparison_plots(iq_data, itau_data, sample_name, plot_path)
                     label=f"{pressure}",
                 )
 
+            # Add centered Gaussian fit if available
+            if centered_fitted_curve is not None:
+                ax_itau.plot(
+                    tau_vals,
+                    centered_fitted_curve,
+                    color=pressure_to_color[pressure],
+                    linestyle="--",
+                    linewidth=2,
+                    alpha=0.9,
+                    label="_nolegend_",
+                )
+
             # Add vertical line for center position if available
             if center_fit is not None:
                 ax_itau.axvline(
@@ -764,8 +1128,17 @@ def create_pressure_comparison_plots(iq_data, itau_data, sample_name, plot_path)
         )
 
         # Only add legend if there are items with valid labels
-        if any(item.get("fitted_curve") is not None for item in itau_data_filtered):
-            ax_itau.legend(fontsize=8, loc="best", title="p [mN/m]", framealpha=0.3)
+        if any(
+            item.get("fitted_curve") is not None
+            or item.get("centered_fitted_curve") is not None
+            for item in itau_data_filtered
+        ):
+            ax_itau.legend(
+                fontsize=8,
+                loc="best",
+                title="p [mN/m]\nsolid=mirrored, dashed=centered",
+                framealpha=0.3,
+            )
 
         # Save I(tau) comparison plot
         itau_comp_file = plot_path / f"{sample_name}_Itau_pressure_comparison.png"
